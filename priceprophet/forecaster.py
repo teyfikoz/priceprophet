@@ -1,7 +1,8 @@
-import pandas as pd
+from typing import Dict
+
 import numpy as np
+import pandas as pd
 from sklearn.linear_model import LinearRegression
-from typing import Optional, Dict
 
 
 class Forecaster:

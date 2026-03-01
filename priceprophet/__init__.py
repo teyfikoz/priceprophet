@@ -6,6 +6,7 @@ __version__ = "0.3.0"
 
 from .forecaster import Forecaster
 
+
 class PriceProphet:
     """
     Central facade for PriceProphet library.
