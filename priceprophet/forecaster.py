@@ -78,7 +78,11 @@ class Forecaster:
         value_col = None
 
         for col in df.columns:
-            if df[col].dtype in ('datetime64[ns]', 'object'):
+            # Use pd.api.types for dtype detection — robust across pandas 1.x/2.x
+            # (pandas 2.x may use datetime64[us] instead of datetime64[ns])
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                date_col = col
+            elif df[col].dtype == object:
                 try:
                     pd.to_datetime(df[col])
                     date_col = col
@@ -107,10 +111,12 @@ class Forecaster:
         """
         df = df.copy()
 
-        # Auto-detect columns if not provided
+        # Auto-detect columns if not provided (pandas 2.x compatible)
         if date_col is None or value_col is None:
             for col in df.columns:
-                if date_col is None:
+                if date_col is None and pd.api.types.is_datetime64_any_dtype(df[col]):
+                    date_col = col
+                elif date_col is None and df[col].dtype == object:
                     try:
                         pd.to_datetime(df[col])
                         date_col = col
