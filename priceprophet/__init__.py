@@ -5,8 +5,8 @@ price elasticity, seasonality analysis, and market shock simulation.
 
 __version__ = "1.0.0"
 
+from .elasticity import ElasticityResult, PriceElasticity
 from .forecaster import Forecaster
-from .elasticity import PriceElasticity, ElasticityResult
 from .seasonality import SeasonalityDetector, SeasonalityResult
 
 
@@ -107,8 +107,8 @@ class PriceProphet:
 
     def _detect_cols(self, df):
         """Auto-detect date and value columns."""
-        import pandas as pd
         import numpy as np
+        import pandas as pd
         date_col = value_col = None
         for col in df.columns:
             if date_col is None and (

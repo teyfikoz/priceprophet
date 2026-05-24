@@ -203,8 +203,8 @@ class Forecaster:
 
     def fit_predict_polynomial(self, df: pd.DataFrame, date_col: str, value_col: str, periods: int = 30, degree: int = 2) -> pd.DataFrame:
         """Polynomial regression forecasting (captures non-linear trends)."""
-        from sklearn.preprocessing import PolynomialFeatures
         from sklearn.pipeline import make_pipeline
+        from sklearn.preprocessing import PolynomialFeatures
         df = df.copy()
         df[date_col] = pd.to_datetime(df[date_col])
         df = df.sort_values(date_col)
