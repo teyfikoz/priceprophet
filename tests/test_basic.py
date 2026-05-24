@@ -150,7 +150,7 @@ def test_priceprophet_seasonality():
         "price": [100 + 10 * np.sin(2 * np.pi * i / 7) for i in range(n)],
     })
     result = pp.seasonality(df)
-    assert hasattr(result, "weekly_seasonality")
+    assert hasattr(result, "has_weekly_seasonality")
     assert hasattr(result, "dominant_period")
 
 
@@ -207,7 +207,7 @@ def test_seasonality_weekly():
     sd = SeasonalityDetector()
     result = sd.detect(df)
     assert isinstance(result, SeasonalityResult)
-    assert result.weekly_seasonality is True
+    assert result.has_weekly_seasonality is True
     assert hasattr(result, "peak_day")
     assert hasattr(result, "dominant_period")
 
@@ -221,4 +221,4 @@ def test_seasonality_no_seasonality():
     })
     sd = SeasonalityDetector()
     result = sd.detect(df)
-    assert isinstance(result.weekly_seasonality, bool)
+    assert isinstance(result.has_weekly_seasonality, bool)
