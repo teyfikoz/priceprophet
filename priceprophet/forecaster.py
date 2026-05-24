@@ -177,3 +177,139 @@ class Forecaster:
             "estimated_volume_change_pct": round(-shock_magnitude * params["volume_impact"] * 100, 2),
             "estimated_recovery_days": params["recovery_days"],
         }
+
+    def fit_predict_ridge(self, df: pd.DataFrame, date_col: str, value_col: str, periods: int = 30, alpha: float = 1.0) -> pd.DataFrame:
+        """Ridge regression forecasting (L2 regularization, robust to outliers)."""
+        from sklearn.linear_model import Ridge
+        df = df.copy()
+        df[date_col] = pd.to_datetime(df[date_col])
+        df = df.sort_values(date_col)
+        df['ordinal'] = df[date_col].map(pd.Timestamp.toordinal)
+        X = df[['ordinal']]
+        y = df[value_col]
+        model = Ridge(alpha=alpha)
+        model.fit(X, y)
+        residual_std = np.std(y.values - model.predict(X))
+        last_date = df[date_col].max()
+        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=periods)
+        future_X = future_dates.map(pd.Timestamp.toordinal).values.reshape(-1, 1)
+        predictions = model.predict(future_X)
+        margin = 1.96 * residual_std
+        return pd.DataFrame({
+            'Date': future_dates, 'Predicted_Value': predictions,
+            'Lower_Bound': predictions - margin, 'Upper_Bound': predictions + margin,
+            'model': 'ridge',
+        })
+
+    def fit_predict_polynomial(self, df: pd.DataFrame, date_col: str, value_col: str, periods: int = 30, degree: int = 2) -> pd.DataFrame:
+        """Polynomial regression forecasting (captures non-linear trends)."""
+        from sklearn.preprocessing import PolynomialFeatures
+        from sklearn.pipeline import make_pipeline
+        df = df.copy()
+        df[date_col] = pd.to_datetime(df[date_col])
+        df = df.sort_values(date_col)
+        df['ordinal'] = df[date_col].map(pd.Timestamp.toordinal)
+        X = df[['ordinal']]
+        y = df[value_col]
+        model = make_pipeline(PolynomialFeatures(degree=degree), LinearRegression())
+        model.fit(X, y)
+        residual_std = np.std(y.values - model.predict(X))
+        last_date = df[date_col].max()
+        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=periods)
+        future_X = future_dates.map(pd.Timestamp.toordinal).values.reshape(-1, 1)
+        predictions = model.predict(future_X)
+        margin = 1.96 * residual_std
+        return pd.DataFrame({
+            'Date': future_dates, 'Predicted_Value': predictions,
+            'Lower_Bound': predictions - margin, 'Upper_Bound': predictions + margin,
+            'model': f'polynomial_deg{degree}',
+        })
+
+    def fit_predict_ema(self, df: pd.DataFrame, date_col: str, value_col: str, periods: int = 30, span: int = 12) -> pd.DataFrame:
+        """Exponential Moving Average forecasting (follows recent trends)."""
+        df = df.copy()
+        df[date_col] = pd.to_datetime(df[date_col])
+        df = df.sort_values(date_col)
+        ema_values = df[value_col].ewm(span=span, adjust=False).mean()
+        last_ema = float(ema_values.iloc[-1])
+        # Extrapolate: EMA tends toward the last value
+        alpha = 2.0 / (span + 1)
+        last_actual = float(df[value_col].iloc[-1])
+        decay = alpha * (last_actual - last_ema)
+        last_date = df[date_col].max()
+        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=periods)
+        residual_std = float(np.std(df[value_col].values - ema_values.values))
+        predictions = np.array([last_ema + decay * np.exp(-0.1 * i) for i in range(periods)])
+        margin = 1.96 * residual_std
+        return pd.DataFrame({
+            'Date': future_dates, 'Predicted_Value': predictions,
+            'Lower_Bound': predictions - margin, 'Upper_Bound': predictions + margin,
+            'model': 'ema',
+        })
+
+    def compare_models(self, df: pd.DataFrame, date_col: str = None, value_col: str = None,
+                       periods: int = 30, cv_split: float = 0.8) -> pd.DataFrame:
+        """
+        Compare multiple forecasting models using train/test split.
+
+        Args:
+            df: Historical price data
+            date_col: Date column (auto-detected if None)
+            value_col: Value column (auto-detected if None)
+            periods: Periods to forecast
+            cv_split: Fraction of data for training (rest for validation)
+
+        Returns:
+            DataFrame with MAE, RMSE, R2 for each model
+        """
+        df = df.copy()
+        # Auto-detect columns
+        if date_col is None or value_col is None:
+            for col in df.columns:
+                if date_col is None and pd.api.types.is_datetime64_any_dtype(df[col]):
+                    date_col = col
+                elif date_col is None and df[col].dtype == object:
+                    try:
+                        pd.to_datetime(df[col])
+                        date_col = col
+                    except (ValueError, TypeError):
+                        pass
+                elif value_col is None and np.issubdtype(df[col].dtype, np.number):
+                    value_col = col
+
+        df[date_col] = pd.to_datetime(df[date_col])
+        df = df.sort_values(date_col).reset_index(drop=True)
+        n = len(df)
+        split = int(n * cv_split)
+        train = df.iloc[:split]
+        test = df.iloc[split:]
+
+        if len(test) == 0:
+            raise ValueError("Not enough data for validation. Need at least 10 rows.")
+
+        test_periods = len(test)
+        results = []
+
+        for model_name, method in [
+            ("linear", self.fit_predict),
+            ("ridge", self.fit_predict_ridge),
+            ("polynomial_deg2", lambda d, dc, vc, p: self.fit_predict_polynomial(d, dc, vc, p, degree=2)),
+            ("ema", self.fit_predict_ema),
+        ]:
+            try:
+                forecast = method(train, date_col, value_col, test_periods)
+                actual = test[value_col].values
+                predicted = forecast['Predicted_Value'].values[:len(actual)]
+                mae = float(np.mean(np.abs(actual - predicted)))
+                rmse = float(np.sqrt(np.mean((actual - predicted) ** 2)))
+                ss_res = np.sum((actual - predicted) ** 2)
+                ss_tot = np.sum((actual - np.mean(actual)) ** 2)
+                r2 = float(1 - ss_res / ss_tot) if ss_tot != 0 else 0.0
+                results.append({'model': model_name, 'MAE': round(mae, 4), 'RMSE': round(rmse, 4), 'R2': round(r2, 4)})
+            except Exception as e:
+                results.append({'model': model_name, 'MAE': None, 'RMSE': None, 'R2': None, 'error': str(e)})
+
+        result_df = pd.DataFrame(results)
+        if 'error' not in result_df.columns:
+            result_df = result_df.sort_values('MAE')
+        return result_df

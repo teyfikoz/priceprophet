@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "priceprophet"
-version = "0.3.0"
-description = "Time-Series Forecasting for Prices"
+version = "1.0.0"
+description = "Multi-model price forecasting, anomaly detection, price elasticity, and seasonality analysis"
 readme = "README.md"
 authors = [
     { name = "Teyfik OZ", email = "teyfikoz@yahoo.com" }
 ]
 license = {text = "MIT"}
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
