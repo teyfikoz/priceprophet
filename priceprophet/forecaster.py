@@ -82,13 +82,13 @@ class Forecaster:
             # (pandas 2.x may use datetime64[us] instead of datetime64[ns])
             if pd.api.types.is_datetime64_any_dtype(df[col]):
                 date_col = col
-            elif df[col].dtype == object:
+            elif df[col].dtype == object or pd.api.types.is_string_dtype(df[col]):
                 try:
                     pd.to_datetime(df[col])
                     date_col = col
                 except (ValueError, TypeError):
                     pass
-            elif np.issubdtype(df[col].dtype, np.number) and value_col is None:
+            elif pd.api.types.is_numeric_dtype(df[col]) and value_col is None:
                 value_col = col
 
         if date_col is None or value_col is None:
