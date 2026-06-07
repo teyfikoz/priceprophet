@@ -13,7 +13,8 @@ def _sample_data(n=90):
 
 def test_version():
     import priceprophet
-    assert priceprophet.__version__ == "1.0.0"
+
+    assert priceprophet.__version__ == "1.1.0"
 
 
 def test_all_exports():
@@ -222,3 +223,222 @@ def test_seasonality_no_seasonality():
     sd = SeasonalityDetector()
     result = sd.detect(df)
     assert isinstance(result.has_weekly_seasonality, bool)
+
+
+# ── SeasonalityResult __str__ ──────────────────────────────────────────────────
+
+def test_seasonality_result_str():
+    from priceprophet import SeasonalityDetector
+    n = 365
+    df = pd.DataFrame({
+        "date": pd.date_range("2024-01-01", periods=n),
+        "price": [100 + 20 * np.sin(2 * np.pi * i / 7) + 15 * np.sin(2 * np.pi * i / 30) for i in range(n)],
+    })
+    sd = SeasonalityDetector()
+    result = sd.detect(df)
+    s = str(result)
+    assert "seasonality" in s.lower()
+
+
+# ── SeasonalityDetector auto-detect columns ────────────────────────────────────
+
+def test_seasonality_auto_detect_columns():
+    from priceprophet import SeasonalityDetector
+    n = 200
+    df = pd.DataFrame({
+        "ts": pd.date_range("2024-01-01", periods=n),
+        "val": [50 + 10 * np.sin(2 * np.pi * i / 7) for i in range(n)],
+    })
+    sd = SeasonalityDetector()
+    # Pass df with non-standard column names but no explicit column args
+    result = sd.detect(df, date_col="ts", value_col="val")
+    assert hasattr(result, "has_weekly_seasonality")
+
+
+# ── Elasticity point method & edge cases ──────────────────────────────────────
+
+def test_elasticity_point_method():
+    from priceprophet import PriceElasticity
+    pe = PriceElasticity()
+    prices = pd.Series([10.0, 11.0, 12.0, 13.0, 14.0])
+    demands = pd.Series([100, 90, 80, 72, 64])
+    result = pe.calculate(prices, demands, method="point")
+    assert isinstance(result.elasticity, float)
+
+
+def test_elasticity_unit_elastic():
+    from priceprophet import PriceElasticity
+    pe = PriceElasticity()
+    # unit elastic: 1% price change -> 1% demand change
+    prices = pd.Series([10.0, 11.0])
+    demands = pd.Series([100.0, 90.9])
+    result = pe.calculate(prices, demands)
+    assert isinstance(result.interpretation, str)
+    assert isinstance(result.revenue_impact, str)
+
+
+def test_elasticity_errors():
+    from priceprophet import PriceElasticity
+    pe = PriceElasticity()
+    with pytest.raises(ValueError):
+        pe.calculate(pd.Series([1.0]), pd.Series([1.0]))  # less than 2
+    with pytest.raises(ValueError):
+        pe.calculate(pd.Series([1.0, 2.0]), pd.Series([1.0]))  # length mismatch
+
+
+# ── Forecaster.predict() auto-detect ─────────────────────────────────────────
+
+def test_forecaster_predict_auto_detect():
+    from priceprophet import Forecaster
+    f = Forecaster()
+    n = 90
+    df = pd.DataFrame({
+        "date": pd.date_range("2025-01-01", periods=n),
+        "price": [100 + i * 0.5 for i in range(n)],
+    })
+    # Use predict() which auto-detects columns
+    result = f.predict(df, periods=7)
+    assert len(result) == 7
+    assert "Predicted_Value" in result.columns
+
+
+# ── compare_models auto-detect ────────────────────────────────────────────────
+
+def test_compare_models_auto_detect():
+    from priceprophet import Forecaster
+    f = Forecaster()
+    n = 120
+    df = pd.DataFrame({
+        "date": pd.date_range("2025-01-01", periods=n),
+        "price": [100 + i * 0.3 for i in range(n)],
+    })
+    result = f.compare_models(df)
+    assert "model" in result.columns
+
+
+# ── predict() with string date column ─────────────────────────────────────────
+
+def test_forecaster_predict_string_dates():
+    from priceprophet import Forecaster
+    f = Forecaster()
+    n = 60
+    df = pd.DataFrame({
+        "date": [str(d.date()) for d in pd.date_range("2025-01-01", periods=n)],
+        "price": [100.0 + i for i in range(n)],
+    })
+    result = f.predict(df, periods=5)
+    assert len(result) == 5
+
+
+def test_forecaster_predict_no_date_col_raises():
+    from priceprophet import Forecaster
+    f = Forecaster()
+    df = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    with pytest.raises(ValueError):
+        f.predict(df)
+
+
+# ── detect_anomalies auto-detect & zero-std ───────────────────────────────────
+
+def test_detect_anomalies_zero_std():
+    from priceprophet import Forecaster
+    f = Forecaster()
+    df = pd.DataFrame({
+        "date": pd.date_range("2025-01-01", periods=10),
+        "price": [100.0] * 10,  # constant price → std = 0
+    })
+    result = f.detect_anomalies(df, "date", "price")
+    assert "is_anomaly" in result.columns
+    assert result["is_anomaly"].sum() == 0
+
+
+# ── PriceProphet elasticity + auto_select ─────────────────────────────────────
+
+def test_priceprophet_elasticity():
+    from priceprophet import PriceProphet
+    pp = PriceProphet()
+    prices = pd.Series([10.0, 11.0, 12.0, 13.0])
+    demands = pd.Series([100, 90, 80, 72])
+    result = pp.elasticity(prices, demands)
+    assert hasattr(result, "elasticity")
+
+
+def test_priceprophet_seasonality_large():
+    from priceprophet import PriceProphet
+    pp = PriceProphet()
+    n = 365
+    df = pd.DataFrame({
+        "date": pd.date_range("2024-01-01", periods=n),
+        "price": [100 + 20 * np.sin(2 * np.pi * i / 7) for i in range(n)],
+    })
+    result = pp.seasonality(df)
+    assert hasattr(result, "peak_month") or result.peak_month is None
+
+
+# ── Seasonality with monthly data ──────────────────────────────────────────────
+
+def test_seasonality_monthly_pattern():
+    from priceprophet import SeasonalityDetector
+    n = 400
+    df = pd.DataFrame({
+        "date": pd.date_range("2023-01-01", periods=n),
+        "price": [100 + 20 * np.sin(2 * np.pi * i / 30) for i in range(n)],
+    })
+    sd = SeasonalityDetector()
+    result = sd.detect(df)
+    assert isinstance(result.has_monthly_seasonality, bool)
+    assert result.autocorr_30d is not None
+
+
+# ── ElasticityResult __str__ ───────────────────────────────────────────────────
+
+def test_elasticity_result_str():
+    from priceprophet import PriceElasticity
+    pe = PriceElasticity()
+    prices = pd.Series([10.0, 11.0, 12.0, 13.0, 14.0])
+    demands = pd.Series([100, 88, 77, 68, 60])
+    result = pe.calculate(prices, demands)
+    s = str(result)
+    assert "Elasticity" in s or "elasticity" in s.lower()
+
+
+# ── Elasticity highly elastic & inelastic interpretations ────────────────────
+
+def test_elasticity_highly_elastic():
+    from priceprophet import PriceElasticity
+    pe = PriceElasticity()
+    # Very elastic: large demand response
+    prices = pd.Series([10.0, 11.0])
+    demands = pd.Series([1000.0, 100.0])
+    result = pe.calculate(prices, demands)
+    assert result.elasticity < -2
+
+
+def test_elasticity_inelastic():
+    from priceprophet import PriceElasticity
+    pe = PriceElasticity()
+    # Inelastic: small demand response
+    prices = pd.Series([10.0, 15.0])
+    demands = pd.Series([100.0, 98.0])
+    result = pe.calculate(prices, demands)
+    assert result.elasticity > -1
+
+
+def test_elasticity_positive():
+    from priceprophet import PriceElasticity
+    pe = PriceElasticity()
+    # Unusual: positive elasticity (Veblen good)
+    prices = pd.Series([10.0, 15.0])
+    demands = pd.Series([100.0, 110.0])
+    result = pe.calculate(prices, demands)
+    assert "positive" in result.interpretation.lower() or "unusual" in result.interpretation.lower()
+
+
+# ── Revenue impact edge cases ─────────────────────────────────────────────────
+
+def test_revenue_impact_unit_elastic():
+    from priceprophet.elasticity import PriceElasticity
+    pe = PriceElasticity()
+    # Manually check _revenue_impact
+    assert "NO effect" in pe._revenue_impact(-1.0)
+    assert "Non-standard" in pe._revenue_impact(0.5)

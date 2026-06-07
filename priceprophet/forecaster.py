@@ -31,7 +31,7 @@ class Forecaster:
 
         # Prepare features (convert dates to ordinal)
         df['ordinal'] = df[date_col].map(pd.Timestamp.toordinal)
-        X = df[['ordinal']]
+        X = df[['ordinal']].values  # numpy array — avoids sklearn feature-name warnings
         y = df[value_col]
 
         # Fit
@@ -185,7 +185,7 @@ class Forecaster:
         df[date_col] = pd.to_datetime(df[date_col])
         df = df.sort_values(date_col)
         df['ordinal'] = df[date_col].map(pd.Timestamp.toordinal)
-        X = df[['ordinal']]
+        X = df[['ordinal']].values  # numpy array — avoids sklearn feature-name warnings
         y = df[value_col]
         model = Ridge(alpha=alpha)
         model.fit(X, y)
@@ -209,7 +209,7 @@ class Forecaster:
         df[date_col] = pd.to_datetime(df[date_col])
         df = df.sort_values(date_col)
         df['ordinal'] = df[date_col].map(pd.Timestamp.toordinal)
-        X = df[['ordinal']]
+        X = df[['ordinal']].values  # numpy array — avoids sklearn feature-name warnings
         y = df[value_col]
         model = make_pipeline(PolynomialFeatures(degree=degree), LinearRegression())
         model.fit(X, y)

@@ -3,6 +3,7 @@
 **Multi-model price forecasting, anomaly detection, price elasticity, and seasonality analysis** for Python.
 
 [![PyPI version](https://badge.fury.io/py/priceprophet.svg)](https://pypi.org/project/priceprophet/)
+[![Build](https://github.com/teyfikoz/priceprophet/actions/workflows/publish.yml/badge.svg)](https://github.com/teyfikoz/priceprophet/actions/workflows/publish.yml)
 [![CI](https://github.com/teyfikoz/priceprophet/actions/workflows/ci.yml/badge.svg)](https://github.com/teyfikoz/priceprophet/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

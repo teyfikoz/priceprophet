@@ -3,7 +3,7 @@ PriceProphet v1.0.0 — Multi-model price forecasting, anomaly detection,
 price elasticity, seasonality analysis, and market shock simulation.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from .elasticity import ElasticityResult, PriceElasticity
 from .forecaster import Forecaster
