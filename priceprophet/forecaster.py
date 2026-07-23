@@ -313,3 +313,105 @@ class Forecaster:
         if 'error' not in result_df.columns:
             result_df = result_df.sort_values('MAE')
         return result_df
+
+
+class EnsembleForecaster:
+    """
+    Ensemble forecaster — combines linear, ridge, polynomial, and EMA models
+    using inverse-MAE weighted averaging for more robust predictions.
+
+    Models with lower validation MAE receive higher weight. Falls back to
+    equal weighting when all models fail cross-validation.
+
+    Example::
+
+        from priceprophet import EnsembleForecaster
+        import pandas as pd
+
+        df = pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=90),
+            "price": [100 + i * 0.5 for i in range(90)],
+        })
+        ens = EnsembleForecaster()
+        forecast = ens.fit_predict(df, "date", "price", periods=30)
+        print(forecast[["Date", "Predicted_Value", "Lower_Bound", "Upper_Bound"]].head())
+    """
+
+    def __init__(self):
+        self._base = Forecaster()
+
+    def fit_predict(
+        self,
+        df: pd.DataFrame,
+        date_col: str,
+        value_col: str,
+        periods: int = 30,
+        cv_split: float = 0.8,
+    ) -> pd.DataFrame:
+        """
+        Train all base models, weight by inverse validation MAE, and return
+        the weighted-average forecast with combined confidence intervals.
+
+        Args:
+            df: Historical data.
+            date_col: Date column name.
+            value_col: Numeric value column name.
+            periods: Forecast horizon (days).
+            cv_split: Train/validation split ratio for weighting (default 0.8).
+
+        Returns:
+            DataFrame with ``Date``, ``Predicted_Value``, ``Lower_Bound``,
+            ``Upper_Bound``, and ``model`` = ``"ensemble"``.
+        """
+        comparison = self._base.compare_models(df, date_col, value_col, periods, cv_split)
+        valid = comparison[comparison["MAE"].notna()].copy()
+
+        # Inverse-MAE weights — better models (lower MAE) get higher weight
+        valid["weight"] = 1.0 / (valid["MAE"] + 1e-9)
+        total_w = valid["weight"].sum()
+        valid["weight"] /= total_w
+
+        model_weights: Dict[str, float] = dict(zip(valid["model"], valid["weight"]))
+
+        methods: Dict[str, object] = {
+            "linear": self._base.fit_predict,
+            "ridge": self._base.fit_predict_ridge,
+            "polynomial_deg2": lambda d, dc, vc, p: self._base.fit_predict_polynomial(d, dc, vc, p, degree=2),
+            "ema": self._base.fit_predict_ema,
+        }
+
+        forecasts: Dict[str, pd.DataFrame] = {}
+        for name, method in methods.items():
+            try:
+                forecasts[name] = method(df, date_col, value_col, periods)  # type: ignore[call-arg]
+            except Exception:
+                pass
+
+        if not forecasts:
+            return self._base.fit_predict(df, date_col, value_col, periods)
+
+        # Fall back to equal weights when cross-validation data is missing
+        active = {k: model_weights.get(k, 0.0) for k in forecasts}
+        if sum(active.values()) == 0:
+            active = {k: 1.0 / len(forecasts) for k in forecasts}
+        norm = sum(active.values())
+
+        first = next(iter(forecasts.values()))
+        n = len(first)
+        preds = np.zeros(n)
+        lower = np.zeros(n)
+        upper = np.zeros(n)
+
+        for name, df_f in forecasts.items():
+            w = active[name] / norm
+            preds += w * df_f["Predicted_Value"].values
+            lower += w * df_f["Lower_Bound"].values
+            upper += w * df_f["Upper_Bound"].values
+
+        return pd.DataFrame({
+            "Date": first["Date"],
+            "Predicted_Value": preds,
+            "Lower_Bound": lower,
+            "Upper_Bound": upper,
+            "model": "ensemble",
+        })

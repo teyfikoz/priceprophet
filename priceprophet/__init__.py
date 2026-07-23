@@ -1,12 +1,12 @@
 """
-PriceProphet v1.0.0 — Multi-model price forecasting, anomaly detection,
+PriceProphet v1.2.0 — Multi-model price forecasting, anomaly detection,
 price elasticity, seasonality analysis, and market shock simulation.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 from .elasticity import ElasticityResult, PriceElasticity
-from .forecaster import Forecaster
+from .forecaster import EnsembleForecaster, Forecaster
 from .seasonality import SeasonalityDetector, SeasonalityResult
 
 
@@ -45,6 +45,7 @@ class PriceProphet:
 
     def __init__(self):
         self._forecaster = Forecaster()
+        self._ensemble = EnsembleForecaster()
         self._elasticity = PriceElasticity()
         self._seasonality = SeasonalityDetector()
 
@@ -75,6 +76,24 @@ class PriceProphet:
         if model == "ema":
             return self._forecaster.fit_predict_ema(df, dc, vc, periods, span=kwargs.get("span", 12))
         return self._forecaster.predict(df, periods=periods)
+
+    def forecast_ensemble(self, df, periods: int = 30, cv_split: float = 0.8):
+        """
+        Forecast using inverse-MAE weighted ensemble of all base models.
+
+        More robust than any single model — automatically weights better
+        performers higher based on cross-validation performance.
+
+        Args:
+            df: Historical DataFrame with date and price columns.
+            periods: Forecast horizon (days).
+            cv_split: Train/validation split ratio for weighting.
+
+        Returns:
+            DataFrame with Date, Predicted_Value, Lower_Bound, Upper_Bound.
+        """
+        dc, vc = self._detect_cols(df)
+        return self._ensemble.fit_predict(df, dc, vc, periods=periods, cv_split=cv_split)
 
     def detect_anomalies(self, df, threshold: float = 2.0):
         """Detect price anomalies using Z-score method."""
@@ -133,6 +152,7 @@ class PriceProphet:
 __all__ = [
     "PriceProphet",
     "Forecaster",
+    "EnsembleForecaster",
     "PriceElasticity",
     "ElasticityResult",
     "SeasonalityDetector",

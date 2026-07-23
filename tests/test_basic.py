@@ -14,7 +14,7 @@ def _sample_data(n=90):
 def test_version():
     import priceprophet
 
-    assert priceprophet.__version__ == "1.1.0"
+    assert priceprophet.__version__ == "1.2.0"
 
 
 def test_all_exports():
@@ -442,3 +442,42 @@ def test_revenue_impact_unit_elastic():
     # Manually check _revenue_impact
     assert "NO effect" in pe._revenue_impact(-1.0)
     assert "Non-standard" in pe._revenue_impact(0.5)
+
+
+# ── EnsembleForecaster ────────────────────────────────────────────────────────
+
+def test_ensemble_forecaster_import():
+    from priceprophet import EnsembleForecaster
+    ens = EnsembleForecaster()
+    assert ens is not None
+
+
+def test_ensemble_fit_predict():
+    from priceprophet import EnsembleForecaster
+    import pandas as pd
+
+    df = pd.DataFrame({
+        "date": pd.date_range("2024-01-01", periods=100),
+        "price": [100 + i * 0.5 + (i % 7) for i in range(100)],
+    })
+    ens = EnsembleForecaster()
+    result = ens.fit_predict(df, "date", "price", periods=15)
+    assert len(result) == 15
+    assert "Predicted_Value" in result.columns
+    assert "Lower_Bound" in result.columns
+    assert "Upper_Bound" in result.columns
+    assert result["model"].iloc[0] == "ensemble"
+
+
+def test_priceprophet_forecast_ensemble():
+    from priceprophet import PriceProphet
+    import pandas as pd
+
+    df = pd.DataFrame({
+        "date": pd.date_range("2024-01-01", periods=100),
+        "price": [50 + i * 0.3 for i in range(100)],
+    })
+    pp = PriceProphet()
+    result = pp.forecast_ensemble(df, periods=10)
+    assert len(result) == 10
+    assert result["Predicted_Value"].iloc[0] > 0
